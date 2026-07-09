@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crop Diagnostic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12160f;
+    --surface: #1b2118;
+    --surface-2: #232b1f;
+    --border: #313d2b;
+    --text: #e9e9dd;
+    --text-muted: #8b9683;
+    --leaf: #8fbf3f;
+    --leaf-dim: #5c7a34;
+    --rust: #d98e4a;
+    --rust-dim: #8a5c30;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 20% 0%, rgba(143,191,63,0.06), transparent 45%),
+      radial-gradient(circle at 100% 100%, rgba(217,142,74,0.05), transparent 40%);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+
+  main { width: 100%; max-width: 620px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: var(--leaf);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px; height: 7px;
+    background: var(--leaf);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--leaf);
+  }
+
+  h1 {
+    font-size: 30px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .sub {
+    color: var(--text-muted);
+    font-size: 14.5px;
+    line-height: 1.55;
+    margin: 0 0 32px;
+    max-width: 46ch;
+  }
+  .sub code {
+    font-family: var(--mono);
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .panel + .panel { margin-top: 16px; }
+
+  #dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    position: relative;
+  }
+  #dropzone:hover, #dropzone.drag {
+    border-color: var(--leaf-dim);
+    background: rgba(143,191,63,0.04);
+  }
+  #dropzone input { display: none; }
+  #dropzone .hint {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  #dropzone .hint strong { color: var(--leaf); font-weight: 500; }
+
+  #preview {
+    display: none;
+    max-width: 100%;
+    max-height: 220px;
+    border-radius: 6px;
+    margin: 0 auto;
+  }
+
+  button {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    border-radius: 7px;
+    padding: 11px 18px;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.05s ease;
+  }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #analyzeBtn {
+    background: var(--leaf);
+    color: #0e1309;
+    width: 100%;
+    margin-top: 14px;
+  }
+  #analyzeBtn:hover:not(:disabled) { opacity: 0.9; }
+
+  .row-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+
+  #resultPanel { display: none; }
+
+  .verdict {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .verdict .label {
+    font-size: 21px;
+    font-weight: 600;
+  }
+  .verdict .label.healthy { color: var(--leaf); }
+  .verdict .label.diseased { color: var(--rust); }
+  .verdict .pct {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--text-muted);
+  }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 1fr 46px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 9px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  .bar-track {
+    height: 7px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .bar-fill.healthy { background: var(--leaf-dim); }
+  .bar-fill.diseased { background: var(--rust-dim); }
+  .bar-name-wrap { display: flex; flex-direction: column; gap: 4px; }
+  .bar-name { color: var(--text); }
+  .bar-pct { text-align: right; color: var(--text-muted); }
+
+  #errorBox {
+    display: none;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--rust);
+    background: rgba(217,142,74,0.08);
+    border: 1px solid var(--rust-dim);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 14px;
+  }
+
+  footer {
+    margin-top: 28px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+  }
+  footer a { color: var(--text-muted); }
+
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(14,19,9,0.3);
+    border-top-color: #0e1309;
+    border-radius: 50%;
+    display: inline-block;
+    vertical-align: -2px;
+    margin-right: 7px;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">model online</div>
+  <h1>Crop Diagnostic</h1>
+  <p class="sub">
+    Upload a leaf photo. The model checks it against 8 classes across
+    4 crops and returns its top calls with confidence. Backed by
+    <code>POST /predict</code> &mdash; see <a href="/docs" style="color:var(--leaf)">/docs</a> for the raw API.
+  </p>
+
+  <div class="panel">
+    <div id="dropzone">
+      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" />
+      <img id="preview" alt="preview" />
+      <div class="hint" id="dropHint"><strong>Click to upload</strong> or drag a leaf photo here &middot; JPG / PNG / WebP, up to 8MB</div>
+    </div>
+    <button id="analyzeBtn" disabled>Select an image first</button>
+    <div id="errorBox"></div>
+  </div>
+
+  <div class="panel" id="resultPanel">
+    <div class="row-label">prediction</div>
+    <div class="verdict">
+      <span class="label" id="verdictLabel">&mdash;</span>
+      <span class="pct" id="verdictPct">&mdash;</span>
+    </div>
+    <div class="row-label">top 3</div>
+    <div id="bars"></div>
+  </div>
+
+  <footer>
+    <span>crop-disease-detection &middot; phase 2</span>
+    <span id="healthPing">checking API&hellip;</span>
+  </footer>
+</main>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const preview = document.getElementById('preview');
+const dropHint = document.getElementById('dropHint');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const errorBox = document.getElementById('errorBox');
+const resultPanel = document.getElementById('resultPanel');
+const verdictLabel = document.getElementById('verdictLabel');
+const verdictPct = document.getElementById('verdictPct');
+const bars = document.getElementById('bars');
+const healthPing = document.getElementById('healthPing');
+
+let selectedFile = null;
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  preview.style.display = 'block';
+  dropHint.innerHTML = `<strong>${file.name}</strong> &middot; ${(file.size / 1024).toFixed(0)} KB &mdash; click to replace`;
+  analyzeBtn.disabled = false;
+  analyzeBtn.textContent = 'Analyze leaf';
+  errorBox.style.display = 'none';
+  resultPanel.style.display = 'none';
+}
+
+function isHealthy(label) {
+  return label.toLowerCase().includes('healthy');
+}
+
+analyzeBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  analyzeBtn.disabled = true;
+  analyzeBtn.innerHTML = '<span class="spinner"></span>Analyzing&hellip;';
+  errorBox.style.display = 'none';
+
+  const form = new FormData();
+  form.append('file', selectedFile);
+
+  try {
+    const res = await fetch('/predict', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Prediction failed.');
+    renderResult(data);
+  } catch (err) {
+    errorBox.textContent = `⚠ ${err.message}`;
+    errorBox.style.display = 'block';
+    resultPanel.style.display = 'none';
+  } finally {
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = 'Analyze leaf';
+  }
+});
+
+function renderResult(data) {
+  const healthy = isHealthy(data.predicted_class);
+  verdictLabel.textContent = data.predicted_class.replace(/_/g, ' ');
+  verdictLabel.className = 'label ' + (healthy ? 'healthy' : 'diseased');
+  verdictPct.textContent = (data.confidence * 100).toFixed(1) + '%';
+
+  bars.innerHTML = '';
+  data.top_3.forEach((item) => {
+    const h = isHealthy(item.label);
+    const pct = (item.confidence * 100).toFixed(1);
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <div class="bar-name-wrap">
+        <span class="bar-name">${item.label.replace(/_/g, ' ')}</span>
+        <div class="bar-track"><div class="bar-fill ${h ? 'healthy' : 'diseased'}" style="width:${pct}%"></div></div>
+      </div>
+      <span class="bar-pct">${pct}%</span>
+    `;
+    bars.appendChild(row);
+  });
+  resultPanel.style.display = 'block';
+}
+
+fetch('/health').then(r => r.json()).then(d => {
+  healthPing.textContent = `${d.num_classes} classes loaded`;
+}).catch(() => { healthPing.textContent = 'API unreachable'; });
+</script>
+</body>
+</html>

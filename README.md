@@ -124,6 +124,116 @@ thing:
    backbone for a short low-LR pass after the initial frozen-backbone
    training -- usually good for a few extra points of accuracy.
 
+## Phase 2: serving API
+
+A FastAPI service wraps the trained model behind a REST API, with a small
+static test page so you can try it in a browser without curl.
+
+```
+api/
+├── main.py       # routes: /health, /classes, /predict
+├── inference.py   # bridges the API to src/predict.py -- one prediction
+│                   #   implementation, not two
+├── schemas.py      # Pydantic response models
+└── static/
+    └── index.html   # drag-and-drop test page, served at /
+tests/
+└── test_api.py       # 7 tests via FastAPI's TestClient, no server needed
+```
+
+Run it:
+
+```bash
+cd api
+uvicorn main:app --reload --port 8000
+```
+
+Then open `http://127.0.0.1:8000/` for the test page, or
+`http://127.0.0.1:8000/docs` for interactive Swagger docs (auto-generated
+by FastAPI from the Pydantic schemas).
+
+**Endpoints:**
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/health` | `{status, model_loaded, num_classes}` |
+| GET | `/classes` | `{classes: [...]}` |
+| POST | `/predict` | `{predicted_class, confidence, top_3: [...]}` -- send a JPEG/PNG/WebP as `file` in multipart form data |
+
+The model loads once at startup (not per-request) via FastAPI's `lifespan`
+hook. `/predict` validates content-type and file size (8MB cap) before
+doing anything expensive, and returns a 400 with a clear `detail` message
+for anything it rejects rather than a raw 500.
+
+Run the tests:
+
+```bash
+pip install -r requirements.txt
+pytest tests/test_api.py -v
+```
+
+All 7 pass against the current model: health/classes shape, a real
+prediction end-to-end, and three rejection cases (wrong content-type,
+empty file, corrupt bytes).
+
+## Phase 3: frontend
+
+A Next.js app replaces the Phase 2 static test page with a real product
+surface -- same visual language (dark leaf-green/rust palette, monospace
+data readouts), now with drag-and-drop upload, a click-to-try sample
+gallery, and live confidence bars.
+
+```
+frontend/
+├── app/
+│   ├── layout.tsx      # root layout -- system font stack, no build-time
+│   │                     #   Google Fonts fetch (see note below)
+│   ├── page.tsx          # composes everything below
+│   └── globals.css        # Tailwind v4 theme -- palette as CSS variables
+├── components/
+│   ├── UploadZone.tsx      # drag-and-drop + click-to-browse
+│   ├── ExampleGallery.tsx   # 8 sample leaves, one per class, click to test
+│   ├── ResultCard.tsx        # prediction + confidence bars
+│   └── StatusPill.tsx         # live /health poll in the footer
+├── lib/
+│   └── api.ts                  # typed fetch wrapper around the Phase 2 API
+├── public/samples/               # the 8 example images ExampleGallery uses
+└── .env.local.example              # NEXT_PUBLIC_API_URL
+```
+
+Run it (with the API from Phase 2 running separately on port 8000):
+
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local   # point this at your API if not localhost:8000
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+**Verified, not just built:** `npm run build` compiles clean (TypeScript +
+ESLint, zero errors). With both the API and the frontend running
+together, a real `POST /predict` from the frontend's origin returns
+`200` with `access-control-allow-origin: *` and a valid prediction --
+confirmed the CORS setup from Phase 2 actually works cross-origin, not
+just from `curl`.
+
+One deliberate choice worth flagging: `layout.tsx` skips `next/font/google`
+(the framework's usual font approach) in favor of a plain system-font
+stack. `next/font` fetches from Google Fonts at *build* time, which fails
+anywhere without open internet access -- same class of problem as the
+ImageNet weights in Phase 1. System fonts sidestep it entirely and cost
+zero extra requests; swap in `next/font` later if you want a specific
+custom typeface once this is running somewhere unrestricted.
+
+## Roadmap
+
+- ~~Phase 1: trained model~~ -- done, 80.2% val accuracy (8 classes)
+- ~~Phase 2: FastAPI serving layer~~ -- done, tested end-to-end
+- ~~Phase 3: Next.js frontend~~ -- done, verified against a live API with real CORS
+- Later: full 38-class dataset + real transfer learning on GPU (see "Scaling up" above), then redeploy; consider Docker Compose to run api + frontend together with one command
+
 ## Acknowledgments
 
 - Dataset: Hughes & Salathé, ["An open access repository of images on

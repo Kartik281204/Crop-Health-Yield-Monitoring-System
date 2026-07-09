@@ -3,3 +3,10 @@ numpy
 pillow
 scikit-learn
 matplotlib
+
+# Phase 2 -- serving API
+fastapi
+uvicorn
+python-multipart
+pytest
+httpx
