@@ -1,0 +1,14 @@
+                     precision    recall  f1-score   support
+
+    Apple_Black_rot      0.766     0.735     0.750        49
+      Apple_healthy      0.740     0.841     0.787        44
+   Corn_Common_rust      0.980     1.000     0.990        50
+       Corn_healthy      0.959     1.000     0.979        47
+Potato_Early_blight      0.880     0.830     0.854        53
+     Potato_healthy      0.733     0.943     0.825        35
+ Tomato_Late_blight      0.929     0.232     0.371        56
+     Tomato_healthy      0.636     0.933     0.757        60
+
+           accuracy                          0.802       394
+          macro avg      0.828     0.814     0.789       394
+       weighted avg      0.829     0.802     0.780       394
