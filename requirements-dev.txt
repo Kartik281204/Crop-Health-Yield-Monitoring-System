@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Testing -- not needed at runtime, so kept out of the Docker image
+pytest
+httpx

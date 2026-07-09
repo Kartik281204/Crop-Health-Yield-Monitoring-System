@@ -227,12 +227,60 @@ ImageNet weights in Phase 1. System fonts sidestep it entirely and cost
 zero extra requests; swap in `next/font` later if you want a specific
 custom typeface once this is running somewhere unrestricted.
 
+## Phase 4: containers + CI
+
+One-command local stack, and tests that run automatically on push.
+
+```
+├── docker-compose.yml
+├── .dockerignore
+├── api/Dockerfile           # python:3.12-slim, libgomp1 for TF, healthcheck
+├── frontend/Dockerfile       # node:22-slim, 3-stage build, standalone output
+├── frontend/.dockerignore
+├── requirements.txt            # trimmed to runtime-only deps (Docker uses this)
+├── requirements-dev.txt         # + pytest/httpx, for local dev and CI
+└── .github/workflows/ci.yml       # pytest job + npm build/lint job
+```
+
+```bash
+docker compose up --build
+```
+brings up the API on `:8000` and the frontend on `:3000` together.
+
+**Important if you deploy this anywhere other than localhost:** the
+frontend calls the API from the *browser* (client-side `fetch`), so
+`NEXT_PUBLIC_API_URL` has to be an address the browser can reach --
+`docker-compose.yml` bakes in `http://localhost:8000`, which only works
+when both containers' ports are mapped to your own machine. Deploying
+API and frontend to different hosts means passing the real public API
+URL as a build arg instead.
+
+**Honesty check, since this matters:** this sandbox has no Docker
+installed, so the two Dockerfiles and `docker-compose.yml` are
+carefully written and logic-reviewed, but **not build-tested** -- unlike
+everything in Phases 1-3, which was actually run. What I could verify,
+and did: the exact `npm run build` the frontend Dockerfile invokes
+succeeds and produces the `server.js` + `public/` + `.next/static/`
+layout the Dockerfile copies; `npm ci` installs cleanly from the
+committed lockfile; and the test suite (now using a generated in-memory
+image for the core predict test, not a downloaded file) passes without
+needing `data/raw` to exist -- which matters because CI checks out a
+clean repo with no gitignored data in it. Worth a `docker compose up
+--build` on your end before trusting it blindly.
+
+**CI** (`.github/workflows/ci.yml`) runs on every push/PR to `main`:
+one job installs `requirements-dev.txt` and runs `pytest`, another runs
+`npm ci`, `npm run lint`, and `npm run build` for the frontend. Both
+jobs run the same commands already verified above, just in GitHub's
+infrastructure instead of this sandbox.
+
 ## Roadmap
 
 - ~~Phase 1: trained model~~ -- done, 80.2% val accuracy (8 classes)
 - ~~Phase 2: FastAPI serving layer~~ -- done, tested end-to-end
 - ~~Phase 3: Next.js frontend~~ -- done, verified against a live API with real CORS
-- Later: full 38-class dataset + real transfer learning on GPU (see "Scaling up" above), then redeploy; consider Docker Compose to run api + frontend together with one command
+- ~~Phase 4: Docker + CI~~ -- written and reviewed; build-test with `docker compose up --build` before relying on it
+- Later: full 38-class dataset + real transfer learning on GPU (see "Scaling up" above), then redeploy
 
 ## Acknowledgments
 

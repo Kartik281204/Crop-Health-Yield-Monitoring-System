@@ -1,0 +1,40 @@
+# One-command local stack: docker compose up --build
+#
+# api  -> http://localhost:8000  (docs at /docs)
+# frontend -> http://localhost:3000
+#
+# NOTE: written and reviewed carefully but not run here -- no Docker in
+# this sandbox. The api and frontend images it builds each wrap commands
+# that *were* run and verified individually (pytest, npm run build, a
+# live cross-origin curl test) -- see the README for specifics.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked in at build time -- this is what the *browser* calls, so
+        # it needs to be an address the browser can reach (localhost:8000
+        # via the port mapping above), not the internal "api" service name.
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
